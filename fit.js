@@ -65,6 +65,15 @@ export function flatValues(m) {
   return out;
 }
 
+// Shops geben Maße teils in Inch an. Gerechnet wird immer in cm: Die App wandelt beim Einlesen um,
+// alles dahinter (analyze, Puppe, 3D) kennt nur cm. Werte dürfen Zahlen oder Bereiche [von, bis] sein.
+export const INCH_CM = 2.54;
+export function toCmValues(values = {}, unit = 'cm') {
+  if (unit !== 'in') return values;
+  const cm = (n) => Math.round(n * INCH_CM * 100) / 100;
+  return Object.fromEntries(Object.entries(values).map(([k, v]) => [k, Array.isArray(v) ? v.map(cm) : cm(v)]));
+}
+
 // ---------- Regeln ----------
 const PREF_SHIFT = { eng: -3, normal: 0, locker: 6 };
 const CIRC = new Set(['chest', 'waist', 'hip', 'thigh']);

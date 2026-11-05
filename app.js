@@ -1,5 +1,5 @@
 import * as db from './db.js';
-import { MEASURES, measureSet, setKind, FITS, fmtCm, BODY_FIELDS, PREFS, analyze, analyzeBodyChart, recommend, mannequinSVG, MODEL_FIELDS, analyzeModel, BODY_HOWTO, measureGuideSVG, estimatedMeasures, CUTS, STRETCHES, detailKeys, detailScale, cleanFitDetail, adviceFor, adviceOutcome, adviceStats } from './fit.js';
+import { MEASURES, measureSet, setKind, FITS, fmtCm, BODY_FIELDS, PREFS, analyze, analyzeBodyChart, recommend, mannequinSVG, MODEL_FIELDS, analyzeModel, BODY_HOWTO, measureGuideSVG, estimatedMeasures, CUTS, STRETCHES, detailKeys, detailScale, cleanFitDetail, adviceFor, adviceOutcome, adviceStats, toCmValues } from './fit.js';
 import { toBackup, fromBackup } from './backup.js';
 import { addWash, removeWash, lastWash, wearsSinceWash } from './pflege.js';
 import { shiftMonth, monthGrid, wornOn, setWornOn, costPerWear } from './kalender.js';
@@ -531,7 +531,7 @@ function readChart(el, type) {
   });
 }
 const chartOptions = (w) => (w.chart?.rows || []).filter((r) => Object.keys(r.values || {}).length)
-  .map((r) => ({ label: r.size, type: w.chart.type, measures: { widthMode: w.chart.widthMode, values: r.values, hemmable: !!w.chart.hemmable, cut: w.cut, stretch: w.stretch, shrink: !!w.shrink } }));
+  .map((r) => ({ label: r.size, type: w.chart.type, measures: { widthMode: w.chart.widthMode, values: toCmValues(r.values, w.chart.unit), hemmable: !!w.chart.hemmable, cut: w.cut, stretch: w.stretch, shrink: !!w.shrink } }));
 
 // ----- 3D-Ansicht -----
 const HEAT_LEGEND = [['#d64541', 'zu eng / kurz'], ['#e89a3d', 'knapp'], ['#4caf6a', 'passt'], ['#7fb3e0', 'etwas weit / lang'], ['#3d6fb6', 'zu weit / lang'], ['#b9b3a8', 'keine Angabe']];
@@ -666,6 +666,10 @@ function openItemForm(existing, opts = {}) {
           <button type="button" data-v="flat" class="${m0.widthMode !== 'circ' ? 'on' : ''}">Flach (halbe Weite)</button>
           <button type="button" data-v="circ" class="${m0.widthMode === 'circ' ? 'on' : ''}">Umfang</button>
         </div></fieldset>
+        <fieldset><legend>Einheit</legend><div class="seg two-seg" id="mUnit">
+          <button type="button" data-v="cm" class="on">cm</button>
+          <button type="button" data-v="in">Inch</button>
+        </div></fieldset>
         <p class="muted small">Flach messen: Teil glatt hinlegen, quer von Kante zu Kante. Webseiten geben Brust/Bund oft als Umfang an – dann „Umfang“ wählen.</p>
         <div class="mgrid" id="mFields">${measureFields(it.category, m0)}</div>
         ${styleFields(it.cut, it.stretch, it.shrink)}
@@ -698,6 +702,14 @@ function openItemForm(existing, opts = {}) {
     };
     const getSource = segVal('mSource', m0.source === 'web' ? 'web' : 'self');
     const getMode = segVal('mMode', m0.widthMode === 'circ' ? 'circ' : 'flat');
+    // Schrankteile werden immer in cm gespeichert: Inch gilt nur für diese Eingabe und wird beim Speichern umgerechnet
+    const getUnit = segVal('mUnit', 'cm');
+    const paintUnit = () => {
+      const u = getUnit() === 'in' ? 'inch' : 'cm';
+      $$('#mFields em', el).forEach((x) => { x.textContent = u; });
+      $$('#mFields input', el).forEach((i) => { if (i.placeholder === 'cm' || i.placeholder === 'inch') i.placeholder = u; });
+    };
+    $$('#mUnit button', el).forEach((b) => b.addEventListener('click', paintUnit));
     const getFit = segVal('fitSeg', it.fit || '');
     const getCut = bindToggleSeg(el, 'cutSeg', it.cut);
     const getStretch = bindToggleSeg(el, 'stretchSeg', it.stretch);
@@ -709,6 +721,7 @@ function openItemForm(existing, opts = {}) {
     const readFitDetail = () => cleanFitDetail(Object.fromEntries($$('[data-fd]', el).map((s) => [s.dataset.fd, s.value])));
     $('[name=category]', el).onchange = (e) => {
       $('#mFields', el).innerHTML = measureFields(e.target.value, { values: readMeasures() });
+      paintUnit();
       $('#fdFields', el).innerHTML = fitDetailFields(e.target.value, readFitDetail());
     };
     // „Wie sitzt es?“ direkt anspringen (z. B. nach einem Kauf aus der Teil-Ansicht)
@@ -739,7 +752,7 @@ function openItemForm(existing, opts = {}) {
         notes: fd.get('notes').trim(),
         photo,
         fitpics,
-        measures: { source: getSource(), widthMode: getMode(), values: readMeasures() },
+        measures: { source: getSource(), widthMode: getMode(), values: toCmValues(readMeasures(), getUnit()) },
         cut: getCut(),
         stretch: getStretch(),
         shrink: $('#shrinkChk', el).checked || undefined,
@@ -1138,7 +1151,11 @@ function openWishForm(existing, opts = {}) {
           <button type="button" data-v="flat" class="${chart.widthMode !== 'circ' ? 'on' : ''}">Flach (halbe Weite)</button>
           <button type="button" data-v="circ" class="${chart.widthMode === 'circ' ? 'on' : ''}">Umfang</button>
         </div></fieldset>
-        <p class="muted small">Eine Zeile pro Größe, Werte in cm. Bereiche wie <b>96–100</b> sind erlaubt. Steht über der Tabelle „Körpermaße“ oder „Brustumfang 96–100“, dann <b>Körpermaße</b> wählen.</p>
+        <fieldset><legend>Einheit der Tabelle</legend><div class="seg two-seg" id="cUnit">
+          <button type="button" data-v="cm" class="${chart.unit !== 'in' ? 'on' : ''}">cm</button>
+          <button type="button" data-v="in" class="${chart.unit === 'in' ? 'on' : ''}">Inch</button>
+        </div></fieldset>
+        <p class="muted small">Eine Zeile pro Größe, Werte in <span id="cUnitLbl">${chart.unit === 'in' ? 'Inch (z. B. 20,5 statt 20½)' : 'cm'}</span>. Bereiche wie <b>96–100</b> sind erlaubt. Steht über der Tabelle „Körpermaße“ oder „Brustumfang 96–100“, dann <b>Körpermaße</b> wählen.</p>
         <div id="chartHost">${chartEditor(w.category, chart)}</div>
         <label class="check"><input type="checkbox" id="cHem" ${chart.hemmable ? 'checked' : ''}> Wird gekürzt (absichtlich lang geschnitten / Schneider)</label>
         ${styleFields(w.cut, w.stretch, w.shrink)}
@@ -1175,6 +1192,8 @@ function openWishForm(existing, opts = {}) {
     });
     segBind('cType', 'type', (rows) => { $('#cModeWrap', el).hidden = chart.type === 'body'; repaintChart(rows); });
     segBind('cMode', 'widthMode');
+    // Die Zahlen bleiben stehen und gelten dann in der neuen Einheit (wie bei Flach/Umfang), umgerechnet wird beim Auswerten
+    segBind('cUnit', 'unit', () => { $('#cUnitLbl', el).textContent = chart.unit === 'in' ? 'Inch (z. B. 20,5 statt 20½)' : 'cm'; });
     const getCut = bindToggleSeg(el, 'cutSeg', w.cut);
     const getStretch = bindToggleSeg(el, 'stretchSeg', w.stretch);
     let prio = w.priority;
