@@ -1,5 +1,5 @@
 // Offline-Cache: holt bei Verbindung immer die aktuelle Version, offline aus dem Cache.
-const CACHE = 'kleiderschrank-v23';
+const CACHE = 'kleiderschrank-v24';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './db.js', './fit.js', './backup.js', './pflege.js', './kalender.js', './view3d.js', './vendor/three.module.min.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png',

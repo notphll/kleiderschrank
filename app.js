@@ -99,14 +99,21 @@ function toast(msg) {
 
 // ---------- Bottom-Sheet ----------
 const sheet = () => $('#sheet');
+let sheetDirty = false; // wurde im offenen Formular etwas geändert?
 function openSheet(html, mount) {
   const d = sheet();
+  sheetDirty = false;
   $('#sheetBody').innerHTML = `<div class="grabber"></div>${html}`;
   if (!d.open) d.showModal();
   $('#sheetBody').scrollTop = 0;
   mount?.($('#sheetBody'));
 }
 function closeSheet() { if (sheet().open) sheet().close(); }
+// Schließen durch den Nutzer (×, Tippen daneben, Esc): Eingaben im Formular nicht versehentlich verlieren
+function requestCloseSheet() {
+  if (sheetDirty && $('#sheetBody form') && !confirm('Änderungen verwerfen?')) return;
+  closeSheet();
+}
 
 // ---------- Datenoperationen ----------
 async function saveItem(it) {
@@ -1440,7 +1447,15 @@ async function init() {
   };
   $('#fab').onclick = () => ({ kalender: () => openDay(today()), schrank: () => openItemForm(null, state.filter.cat !== 'Alle' ? { prefill: { category: state.filter.cat } } : {}), outfits: () => openOutfitForm(null), wunsch: () => openWishForm(null) })[state.tab]?.();
   $('#settingsBtn').onclick = openSettings;
-  sheet().addEventListener('click', (e) => { if (e.target === sheet()) closeSheet(); });
+  sheet().addEventListener('click', (e) => { if (e.target === sheet()) requestCloseSheet(); });
+  sheet().addEventListener('cancel', (e) => { e.preventDefault(); requestCloseSheet(); });
+  $('#sheetClose').onclick = requestCloseSheet;
+  const body = $('#sheetBody');
+  const markDirty = () => { sheetDirty = true; };
+  body.addEventListener('input', markDirty);
+  body.addEventListener('change', markDirty);
+  // Auswahl-Knöpfe im Formular zählen als Änderung, der Kategorie-Filter im Auswahlraster nicht
+  body.addEventListener('click', (e) => { if (e.target.closest('form button[type=button]:not([data-cat])')) markDirty(); });
 
   render();
   importFromUrl();
